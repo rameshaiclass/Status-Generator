@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Status Hub</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Icons (Heroicons via CDN) -->
+    <script src="https://unpkg.com/heroicons@2.1.3/dist/solid.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f6;
+        }
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Simple loading spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-5">
+            <h1 class="text-3xl font-bold text-gray-900">Daily Status Hub</h1>
+            <p class="text-gray-600">Your daily source for new statuses, quotes, and memes.</p>
+        </div>
+    </header>
+
+    <!-- Filter Tabs Navigation -->
+    <nav class="bg-white shadow-sm sticky top-[89px] z-10">
+        <div class="container mx-auto px-4">
+            <div id="filter-tabs" class="flex items-center space-x-2 sm:space-x-4 overflow-x-auto py-3">
+                <!-- Tabs will be dynamically generated -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container mx-auto p-4 my-6">
+        <!-- Loading Indicator -->
+        <div id="loading" class="flex justify-center items-center h-64">
+            <div class="spinner"></div>
+            <p class="ml-3 text-gray-700">Loading statuses...</p>
+        </div>
+
+        <!-- Status Grid -->
+        <div id="status-grid" class="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Status cards will be injected here by JavaScript -->
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-message" class="hidden text-center p-10 bg-red-50 rounded-lg">
+            <h3 class="text-xl font-semibold text-red-700">Oops! Something went wrong.</h3>
+            <p class="text-red-600 mt-2">We couldn't load the statuses. Please check your connection or try again later.</p>
+            <p id="error-details" class="text-sm text-red-500 mt-1"></p>
+        </div>
+    </main>
+
+    <!-- Email Capture Modal -->
+    <div id="email-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 sm:p-8 relative">
+            <!-- Close Button -->
+            <button id="modal-close-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Free Download!</h2>
+            <p class="text-gray-600 mb-6">Enter your email to download this image for free.</p>
+
+            <form id="email-form">
+                <div class="mb-4">
+                    <label for="email-input" class="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    <input type="email" id="email-input" name="email" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="you@example.com">
+                </div>
+                
+                <button type="submit" id="modal-submit-btn" class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200">
+                    Download Now
+                </button>
+
+                <p id="modal-error" class="text-sm text-red-600 mt-3 h-4"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-400 mt-12 py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p>&copy; <span id="current-year"></span> Daily Status Hub. All rights reserved.</p>
+        </div>
+    </footer>
+
+
+    <!-- JavaScript -->
+    <script>
+        // ---------------------------------------------------------------------
+        // CONFIGURATION
+        // ---------------------------------------------------------------------
+        // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycby8q0z3gktc4D-i4FfmCubsWAhcPpqqWtDBWdGv5gaPqm3Ws-H4-axs1ljDG1q90v_Rkw/exec"; 
+        
+        // --- (Do not edit below this line unless you know what you're doing) ---
+
+        // ---------------------------------------------------------------------
+        // GLOBAL STATE & DOM SELECTORS
+        // ---------------------------------------------------------------------
+        let allStatuses = [];
+        let activeCategory = 'All';
+        let currentImageUrlToDownload = null;
+        let isSubmittingEmail = false;
+
+        const dom = {
+            grid: document.getElementById('status-grid'),
+            loading: document.getElementById('loading'),
+            tabs: document.getElementById('filter-tabs'),
+            errorMessage: document.getElementById('error-message'),
+            errorDetails: document.getElementById('error-details'),
+            modal: document.getElementById('email-modal'),
+            modalForm: document.getElementById('email-form'),
+            modalCloseBtn: document.getElementById('modal-close-btn'),
+            modalSubmitBtn: document.getElementById('modal-submit-btn'),
+            modalEmailInput: document.getElementById('email-input'),
+            modalError: document.getElementById('modal-error'),
+            currentYear: document.getElementById('current-year'),
+        };
+
+        // ---------------------------------------------------------------------
+        // CORE FUNCTIONS
+        // ---------------------------------------------------------------------
+
+        /**
+         * Fetches statuses from the Google Apps Script backend.
+         */
+        async function fetchStatuses() {
+            try {
+                // ADDED: Check if the URL is still the placeholder
+                if (WEB_APP_URL === "{{WEB_APP_URL}}" || !WEB_APP_URL) {
+                    console.error("CONFIGURATION ERROR: WEB_APP_URL is not set.");
+                    dom.loading.classList.add('hidden');
+                    dom.errorMessage.classList.remove('hidden');
+                    dom.errorDetails.innerHTML = "<strong>Configuration Error:</strong> Please replace <code>{{WEB_APP_URL}}</code> in your <code>index.html</code> file with the deployed Google Apps Script URL.";
+                    return; // Stop execution
+                }
+
+                const response = await fetch(WEB_APP_URL);
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok (${response.status})`);
+                }
+                const result = await response.json();
+
+                if (!result.success || !result.data) {
+                    throw new Error(result.error || "Failed to parse data from backend.");
+                }
+
+                allStatuses = result.data;
+                dom.loading.classList.add('hidden');
+                dom.grid.classList.remove('hidden');
+                dom.grid.classList.add('grid');
+                
+                setupTabs();
+                renderStatuses(activeCategory);
+
+            } catch (error) {
+                console.error("Error fetching statuses:", error);
+                dom.loading.classList.add('hidden');
+                dom.errorMessage.classList.remove('hidden');
+                dom.errorDetails.textContent = error.message;
+            }
+        }
+
+        /**
+         * Dynamically creates filter tabs based on available categories.
+         */
+        function setupTabs() {
+            const categories = ['All', ...new Set(allStatuses.map(s => s.category))];
+            dom.tabs.innerHTML = categories.map(category => `
+                <button
+                    data-category="${category}"
+                    class="tab-btn whitespace-nowrap px-4 py-2 text-sm sm:text-base font-medium rounded-md transition-colors duration-200 ${category === 'All' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-200'}">
+                    ${category}
+                </button>
+            `).join('');
+        }
+
+        /**
+         * Renders the status cards into the grid based on the active category.
+         * @param {string} category - The category to filter by ('All', 'Daily', etc.)
+         */
+        function renderStatuses(category) {
+            const filtered = category === 'All'
+                ? allStatuses
+                : allStatuses.filter(s => s.category === category);
+
+            if (filtered.length === 0) {
+                dom.grid.innerHTML = `<p class="md:col-span-2 lg:col-span-3 text-center text-gray-600">No statuses found for "${category}".</p>`;
+                return;
+            }
+
+            dom.grid.innerHTML = filtered.map(status => `
+                <div class="status-card bg-white rounded-lg shadow-lg overflow-hidden flex flex-col">
+                    <img src="${status.imageUrl}" alt="Status image for ${status.category}" class="w-full h-56 object-cover" onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Image+Not+Found'; this.onerror=null;">
+                    
+                    <div class="p-5 flex-grow">
+                        <p class="status-text text-gray-800 text-lg leading-relaxed">${status.text}</p>
+                    </div>
+                    
+                    <div class="p-4 bg-gray-50 border-t border-gray-100 grid grid-cols-2 gap-3">
+                        <button class="copy-btn flex items-center justify-center px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 transition-all duration-200"
+                                data-text="${encodeURIComponent(status.text)}">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.195.084.4.084.612v0a2.25 2.25 0 01-2.25 2.25H9A2.25 2.25 0 016.75 4.5v0c0-.212.03-.417.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5A2.25 2.25 0 0116.5 21.75H7.5A2.25 2.25 0 015.25 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                            </svg>
+                            <span class="btn-text">Copy Text</span>
+                        </button>
+                        
+                        <button class="download-btn flex items-center justify-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-all duration-200"
+                                data-image-url="${status.imageUrl}">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                            Download
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        /**
+         * Handles clicks on the filter tabs.
+         * @param {Event} e - The click event.
+         */
+        function handleTabClick(e) {
+            const clickedTab = e.target.closest('.tab-btn');
+            if (!clickedTab) return;
+
+            const newCategory = clickedTab.dataset.category;
+            if (newCategory === activeCategory) return;
+
+            activeCategory = newCategory;
+
+            // Update tab styles
+            dom.tabs.querySelectorAll('.tab-btn').forEach(btn => {
+                if (btn.dataset.category === activeCategory) {
+                    btn.classList.add('bg-blue-600', 'text-white', 'shadow-md');
+                    btn.classList.remove('text-gray-600', 'hover:bg-gray-200');
+                } else {
+                    btn.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
+                    btn.classList.add('text-gray-600', 'hover:bg-gray-200');
+                }
+            });
+
+            // Re-render the grid
+            renderStatuses(activeCategory);
+        }
+
+        /**
+         * Handles clicks within the status grid (copy/download).
+         * @param {Event} e - The click event.
+         */
+        function handleGridClick(e) {
+            const copyBtn = e.target.closest('.copy-btn');
+            const downloadBtn = e.target.closest('.download-btn');
+
+            if (copyBtn) {
+                handleCopyClick(copyBtn);
+            } else if (downloadBtn) {
+                handleDownloadClick(downloadBtn);
+            }
+        }
+
+        /**
+         * Copies status text to clipboard.
+         * @param {HTMLElement} btn - The copy button that was clicked.
+         */
+        function handleCopyClick(btn) {
+            const textToCopy = decodeURIComponent(btn.dataset.text);
+            const textSpan = btn.querySelector('.btn-text');
+
+            if (!navigator.clipboard) {
+                alert("Clipboard API not supported. Please copy manually.");
+                return;
+            }
+
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                textSpan.textContent = 'Copied!';
+                btn.classList.add('bg-green-500', 'text-white');
+                btn.classList.remove('bg-gray-200', 'text-gray-700');
+                
+                setTimeout(() => {
+                    textSpan.textContent = 'Copy Text';
+                    btn.classList.remove('bg-green-500', 'text-white');
+                    btn.classList.add('bg-gray-200', 'text-gray-700');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                textSpan.textContent = 'Failed!';
+                setTimeout(() => { textSpan.textContent = 'Copy Text'; }, 2000);
+            });
+        }
+
+        /**
+         * Opens the email modal to initiate download.
+         * @param {HTMLElement} btn - The download button that was clicked.
+         */
+        function handleDownloadClick(btn) {
+            currentImageUrlToDownload = btn.dataset.imageUrl;
+            dom.modal.classList.remove('hidden');
+            dom.modalEmailInput.focus();
+        }
+
+        /**
+         * Closes the email modal.
+         */
+        function closeModal() {
+            if (isSubmittingEmail) return; // Don't close while submitting
+            dom.modal.classList.add('hidden');
+            dom.modalForm.reset();
+            dom.modalError.textContent = '';
+            currentImageUrlToDownload = null;
+        }
+
+        /**
+         * Handles the email form submission.
+         * @param {Event} e - The form submit event.
+         */
+        async function handleEmailSubmit(e) {
+            e.preventDefault();
+            if (isSubmittingEmail) return;
+
+            isSubmittingEmail = true;
+            dom.modalSubmitBtn.disabled = true;
+            dom.modalSubmitBtn.textContent = 'Submitting...';
+            dom.modalError.textContent = '';
+
+            const email = dom.modalEmailInput.value;
+            const imageUrl = currentImageUrlToDownload; // Capture the URL
+
+            try {
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    mode: 'cors', // Required for cross-origin POST
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8', // Apps Script quirk
+                    },
+                    body: JSON.stringify({ email: email, imageUrl: imageUrl }), // Send email and image URL
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || "An unknown error occurred.");
+                }
+
+                // Success! Close modal and trigger download
+                closeModal();
+                triggerFileDownload(imageUrl);
+
+            } catch (error) {
+                console.error("Email submission error:", error);
+                dom.modalError.textContent = `Error: ${error.message}`;
+            } finally {
+                isSubmittingEmail = false;
+                dom.modalSubmitBtn.disabled = false;
+                dom.modalSubmitBtn.textContent = 'Download Now';
+            }
+        }
+
+        /**
+         * Triggers a cross-origin file download.
+         * @param {string} url - The URL of the file to download.
+         */
+        async function triggerFileDownload(url) {
+            if (!url) return;
+
+            try {
+                // Fetch the image as a blob
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image. Status: ${response.status}`);
+                }
+                const blob = await response.blob();
+
+                // Create an object URL for the blob
+                const objectUrl = URL.createObjectURL(blob);
+                
+                // Create a temporary link to trigger the download
+                const link = document.createElement('a');
+                link.href = objectUrl;
+                
+                // Extract filename from URL or create a generic one
+                const filename = url.substring(url.lastIndexOf('/') + 1) || 'status-image.jpg';
+                link.download = filename;
+
+                // Append to body, click, and remove
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                // Revoke the object URL to free up memory
+                URL.revokeObjectURL(objectUrl);
+
+            } catch (error) {
+                console.error('Download error:', error);
+                // Fallback for tricky cross-origin issues: open in new tab
+                alert("Download failed. Opening image in a new tab for you to save manually.");
+                window.open(url, '_blank');
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // INITIALIZATION & EVENT LISTENERS
+        // ---------------------------------------------------------------------
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set current year in footer
+            dom.currentYear.textContent = new Date().getFullYear();
+            
+            // Fetch initial data
+            fetchStatuses();
+
+            // Event Listeners
+            dom.tabs.addEventListener('click', handleTabClick);
+            dom.grid.addEventListener('click', handleGridClick);
+            dom.modalCloseBtn.addEventListener('click', closeModal);
+            dom.modalForm.addEventListener('submit', handleEmailSubmit);
+
+            // Close modal on outside click
+            dom.modal.addEventListener('click', (e) => {
+                if (e.target === dom.modal) {
+                    closeModal();
+                }
+            });
+            
+            // Close modal with Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !dom.modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
