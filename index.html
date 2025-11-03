@@ -167,25 +167,29 @@
 
         /**
          * Fetches statuses from the Google Apps Script backend.
+         * --- Uses POST to avoid redirects ---
          */
         async function fetchStatuses() {
             try {
-                // ADDED: Check if the URL is still the placeholder
                 if (WEB_APP_URL === "{{WEB_APP_URL}}" || !WEB_APP_URL) {
-                    console.error("CONFIGURATION ERROR: WEB_APP_URL is not set.");
-                    dom.loading.classList.add('hidden');
-                    dom.errorMessage.classList.remove('hidden');
-                    dom.errorDetails.innerHTML = "<strong>Configuration Error:</strong> Please replace <code>{{WEB_APP_URL}}</code> in your <code>index.html</code> file with the deployed Google Apps Script URL.";
-                    return; // Stop execution
+                    throw new Error("Configuration Error: WEB_APP_URL is not set in index.html.");
                 }
 
-                const response = await fetch(WEB_APP_URL);
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8', // Apps Script quirk
+                    },
+                    body: JSON.stringify({ action: 'getData' }) // Tell backend we want data
+                });
+
                 if (!response.ok) {
                     throw new Error(`Network response was not ok (${response.status})`);
                 }
                 const result = await response.json();
 
-                if (!result.success || !result.data) {
+                if (!result.success || typeof result.data === 'undefined') {
                     throw new Error(result.error || "Failed to parse data from backend.");
                 }
 
@@ -209,7 +213,8 @@
          * Dynamically creates filter tabs based on available categories.
          */
         function setupTabs() {
-            const categories = ['All', ...new Set(allStatuses.map(s => s.category))];
+            if (!dom.tabs) return; // Safety check
+            const categories = ['All', ...new Set(allStatuses.map(s => s.category).filter(Boolean))]; // Filter out empty categories
             dom.tabs.innerHTML = categories.map(category => `
                 <button
                     data-category="${category}"
@@ -224,6 +229,7 @@
          * @param {string} category - The category to filter by ('All', 'Daily', etc.)
          */
         function renderStatuses(category) {
+            if (!dom.grid) return; // Safety check
             const filtered = category === 'All'
                 ? allStatuses
                 : allStatuses.filter(s => s.category === category);
@@ -235,15 +241,15 @@
 
             dom.grid.innerHTML = filtered.map(status => `
                 <div class="status-card bg-white rounded-lg shadow-lg overflow-hidden flex flex-col">
-                    <img src="${status.imageUrl}" alt="Status image for ${status.category}" class="w-full h-56 object-cover" onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Image+Not+Found'; this.onerror=null;">
+                    <img src="${status.imageUrl}" alt="Status image for ${status.category || 'status'}" class="w-full h-56 object-cover" onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Image+Not+Found'; this.onerror=null;">
                     
                     <div class="p-5 flex-grow">
-                        <p class="status-text text-gray-800 text-lg leading-relaxed">${status.text}</p>
+                        <p class="status-text text-gray-800 text-lg leading-relaxed">${status.text || ''}</p>
                     </div>
                     
                     <div class="p-4 bg-gray-50 border-t border-gray-100 grid grid-cols-2 gap-3">
                         <button class="copy-btn flex items-center justify-center px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 transition-all duration-200"
-                                data-text="${encodeURIComponent(status.text)}">
+                                data-text="${encodeURIComponent(status.text || '')}">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.195.084.4.084.612v0a2.25 2.25 0 01-2.25 2.25H9A2.25 2.25 0 016.75 4.5v0c0-.212.03-.417.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5A2.25 2.25 0 0116.5 21.75H7.5A2.25 2.25 0 015.25 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
                             </svg>
@@ -312,9 +318,13 @@
         function handleCopyClick(btn) {
             const textToCopy = decodeURIComponent(btn.dataset.text);
             const textSpan = btn.querySelector('.btn-text');
+            if (!textSpan) return;
 
             if (!navigator.clipboard) {
-                alert("Clipboard API not supported. Please copy manually.");
+                // Clipboard API not supported (e.g., insecure context)
+                // We cannot use window.alert, so we'll show the error in the button
+                textSpan.textContent = 'No Clipboard!';
+                setTimeout(() => { textSpan.textContent = 'Copy Text'; }, 2000);
                 return;
             }
 
@@ -379,7 +389,11 @@
                     headers: {
                         'Content-Type': 'text/plain;charset=utf-8', // Apps Script quirk
                     },
-                    body: JSON.stringify({ email: email, imageUrl: imageUrl }), // Send email and image URL
+                    body: JSON.stringify({
+                        action: 'saveEmail', // Tell backend we are saving an email
+                        email: email, 
+                        imageUrl: imageUrl 
+                    }),
                 });
 
                 const result = await response.json();
@@ -411,7 +425,7 @@
 
             try {
                 // Fetch the image as a blob
-                const response = await fetch(url);
+                const response = await fetch(url); 
                 if (!response.ok) {
                     throw new Error(`Failed to fetch image. Status: ${response.status}`);
                 }
@@ -439,9 +453,20 @@
             } catch (error) {
                 console.error('Download error:', error);
                 // Fallback for tricky cross-origin issues: open in new tab
-                alert("Download failed. Opening image in a new tab for you to save manually.");
+                showErrorModal("Download failed. Opening image in a new tab for you to save manually.");
                 window.open(url, '_blank');
             }
+        }
+        
+        /**
+         * Reusable function to show a simple modal alert.
+         * (Replaces window.alert)
+         */
+        function showErrorModal(message) {
+             // Simple implementation: reuse the error-message block
+             dom.errorMessage.classList.remove('hidden');
+             dom.errorDetails.textContent = message;
+             // You could build a more modal-like alert here if needed
         }
 
         // ---------------------------------------------------------------------
@@ -450,27 +475,31 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             // Set current year in footer
-            dom.currentYear.textContent = new Date().getFullYear();
+            if(dom.currentYear) {
+                dom.currentYear.textContent = new Date().getFullYear();
+            }
             
             // Fetch initial data
             fetchStatuses();
 
             // Event Listeners
-            dom.tabs.addEventListener('click', handleTabClick);
-            dom.grid.addEventListener('click', handleGridClick);
-            dom.modalCloseBtn.addEventListener('click', closeModal);
-            dom.modalForm.addEventListener('submit', handleEmailSubmit);
+            if(dom.tabs) dom.tabs.addEventListener('click', handleTabClick);
+            if(dom.grid) dom.grid.addEventListener('click', handleGridClick);
+            if(dom.modalCloseBtn) dom.modalCloseBtn.addEventListener('click', closeModal);
+            if(dom.modalForm) dom.modalForm.addEventListener('submit', handleEmailSubmit);
 
             // Close modal on outside click
-            dom.modal.addEventListener('click', (e) => {
-                if (e.target === dom.modal) {
-                    closeModal();
-                }
-            });
+            if(dom.modal) {
+                dom.modal.addEventListener('click', (e) => {
+                    if (e.target === dom.modal) {
+                        closeModal();
+                    }
+                });
+            }
             
             // Close modal with Escape key
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && !dom.modal.classList.contains('hidden')) {
+                if (e.key === 'Escape' && dom.modal && !dom.modal.classList.contains('hidden')) {
                     closeModal();
                 }
             });
@@ -478,5 +507,4 @@
     </script>
 </body>
 </html>
-
 
